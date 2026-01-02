@@ -1,0 +1,16 @@
+#EXTM3U
+
+# =========================
+#      台湾电影频道（稳定）
+# =========================
+#EXTINF:-1 tvg-name="龙祥电影" group-title="台湾电影", 龙祥电影台
+https://raw.githubusercontent.com/iptv-org/iptv/master/streams/tw_ls_movies.m3u8
+
+#EXTINF:-1 tvg-name="纬来电影" group-title="台湾电影", 纬来电影台
+https://raw.githubusercontent.com/iptv-org/iptv/master/streams/tw_videoland_movies.m3u8
+
+#EXTINF:-1 tvg-name="东森电影" group-title="台湾电影", 东森电影台
+https://raw.githubusercontent.com/iptv-org/iptv/master/streams/tw_ettv_movies.m3u8
+
+#EXTINF:-1 tvg-name="卫视电影台" group-title="台湾电影", 卫视电影台
+https://raw.githubusercontent.com/iptv-org/iptv/master/streams/tw_star_chinese_movies.m3u8
