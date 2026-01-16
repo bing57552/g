@@ -1,4 +1,74 @@
-import os
+# update.py
+
+import requests
+
+def fetch(url):
+    try:
+        return requests.get(url, timeout=10).text
+    except:
+        return ""
+
+# 港澳台公开源（iptv-org）
+HK = "https://iptv-org.github.io/iptv/regions/hk.m3u"
+TW = "https://iptv-org.github.io/iptv/regions/tw.m3u"
+MO = "https://iptv-org.github.io/iptv/regions/mo.m3u"
+
+# 电影台（含 CATCHPLAY）
+MOVIE = "https://iptv-org.github.io/iptv/categories/movies.m3u"
+
+# 你的自定义频道（Astro + CATCHPLAY）
+CUSTOM = """
+#EXTINF:-1 tvg-name="Astro AOD 311" group-title="Astro", Astro AOD 311
+http://50.7.161.82:8278/streams/d/AstroAOD/playlist.m3u8
+
+#EXTINF:-1 tvg-name="Astro 双星" group-title="Astro", Astro Shuang Xing
+http://50.7.161.82:8278/streams/d/Shuangxing/playlist.m3u8
+
+#EXTINF:-1 tvg-name="CATCHPLAY Movies" group-title="电影", CATCHPLAY 电影台
+https://d3j7ofexbkpjkf.cloudfront.net/CH_CATCHPLAY/index.m3u8
+"""
+
+# 去除购物台关键词
+BLOCK = ["购物", "購物", "Shop", "Mall", "家购", "momo", "东森购物"]
+
+def clean(content):
+    lines = content.splitlines()
+    cleaned = []
+    skip = False
+
+    for line in lines:
+        if line.startswith("#EXTINF"):
+            skip = any(b in line for b in BLOCK)
+        if not skip:
+            cleaned.append(line)
+
+    return "\n".join(cleaned)
+
+def main():
+    print("开始更新 live.m3u ...")
+
+    # 抓取公开源
+    hk = fetch(HK)
+    tw = fetch(TW)
+    mo = fetch(MO)
+    movie = fetch(MOVIE)
+
+    # 合并所有源
+    merged = "#EXTM3U\n"
+    merged += clean(hk) + "\n"
+    merged += clean(tw) + "\n"
+    merged += clean(mo) + "\n"
+    merged += clean(movie) + "\n"
+    merged += CUSTOM
+
+    # 写入文件
+    with open("live.m3u", "w", encoding="utf-8") as f:
+        f.write(merged)
+
+    print("更新完成！")
+
+if __name__ == "__main__":
+    main()import os
 import requests
 
 # 你要抓取直播源的基础地址（你只需要改这里）
