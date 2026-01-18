@@ -1,0 +1,33 @@
+name: 自动更新 IPTV 文件
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'  # 每天凌晨 2 点自动运行
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 拉取仓库
+      uses: actions/checkout@v3
+
+    - name: 设置 Python 环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: 安装依赖
+      run: pip install requests
+
+    - name: 运行 update.py
+      run: python update.py
+
+    - name: 提交更新文件
+      run: |
+        git config --global user.name "GitHub Action"
+        git config --global user.email "action@github.com"
+        git add *.m3u README.md index.html
+        git commit -m "自动更新频道列表和入口页"
+        git push
