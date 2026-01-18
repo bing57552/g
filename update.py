@@ -1,7 +1,16 @@
 import os
 import requests
 import time
-
+# 测速函数：返回毫秒
+def test_speed(url, timeout=3):
+    try:
+        start = time.time()
+        r = requests.get(url, timeout=timeout, stream=True)
+        r.close()
+        end = time.time()
+        return (end - start) * 1000  # 转换为毫秒
+    except:
+        return 99999  # 超时或失败
 # 过滤购物台关键词
 BLOCK_KEYWORDS = ["购物", "shop", "momo", "东森购物", "年代购物", "tvbs欢乐购物"]
 
