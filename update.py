@@ -246,14 +246,31 @@ def main():
             current_title = ""
             for line in lines:
                 line = line.strip()
+if not is_valid_stream(url):
+    continue
 
                 if line.startswith("#EXTINF"):
                     current_title = line.replace("#EXTINF:-1,", "").strip()
                     continue
 
-                if line.startswith("http"):
-                    url = line.strip()
-                    all_channels.append({"title": current_title, "url": url})
+                for line in lines:
+    line = line.strip()
+
+    if line.startswith("#EXTINF"):
+        current_title = line.replace("#EXTINF:-1,", "").strip()
+        continue
+
+    if line.startswith("http"):
+        url = line.strip()
+
+        # ✅ 过滤无效直播源
+        if not is_valid_stream(url):
+            continue
+
+        all_channels.append({
+            "title": current_title,
+            "url": url
+        })
 
     print(f"\n共收集频道：{len(all_channels)} 条\n")
 
