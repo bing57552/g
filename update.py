@@ -236,67 +236,65 @@ def main():
 
     all_channels = []
 
-    # 1. 扫描当前目录所有 .m3u 文件
-    for filename in os.listdir("."):
-        if filename.endswith(".m3u"):
-            print(f"读取：{filename}")
-            with open(filename, "r", encoding="utf-8", errors="ignore") as f:
-                lines = f.readlines()
+    # 1. 收集所有频道
+all_channels = []
 
-            current_title = ""
-            for line in lines:
-                line = line.strip()
-if not is_valid_stream(url):
-    continue
+for filename in os.listdir("."):
+    if filename.endswith(".m3u"):
+        print(f"读取: {filename}")
+        with open(filename, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
 
-                if line.startswith("#EXTINF"):
-                    current_title = line.replace("#EXTINF:-1,", "").strip()
+        current_title = ""
+        for line in lines:
+            line = line.strip()
+
+            if line.startswith("#EXTINF"):
+                current_title = line.replace("#EXTINF:-1,", "").strip()
+                continue
+
+            if line.startswith("http"):
+                url = line.strip()
+
+                # 过滤无效源
+                if not is_valid_stream(url):
                     continue
 
-                for line in lines:
-    line = line.strip()
+                all_channels.append({
+                    "title": current_title,
+                    "url": url
+                })
 
-    if line.startswith("#EXTINF"):
-        current_title = line.replace("#EXTINF:-1,", "").strip()
-        continue
+print(f"\n共收集频道: {len(all_channels)} 条\n")
 
-    if line.startswith("http"):
-        url = line.strip()
 
-        # ✅ 过滤无效直播源
-        if not is_valid_stream(url):
-            continue
+# 2. 测速
+print("开始测速...\n")
+all_channels_with_speed = []
 
-        all_channels.append({
-            "title": current_title,
-            "url": url
-        })
+for item in all_channels:
+    ping = test_url(item["url"])
+    if ping is not None:
+        item["ping"] = ping
+        all_channels_with_speed.append(item)
+        print(f"[OK] {item['title']} 延迟: {ping:.2f}s")
+    else:
+        print(f"[X] {item['title']} 不可用")
 
-    print(f"\n共收集频道：{len(all_channels)} 条\n")
+print(f"\n可用频道: {len(all_channels_with_speed)} 条\n")
 
-    # 2. 测速
-    print("开始测速...\n")
-    all_channels_with_speed = []
-    for item in all_channels:
-        ping = test_url(item["url"])
-        if ping is not None:
-            item["ping"] = ping
-            all_channels_with_speed.append(item)
-            print(f"[OK] {item['title']}  延迟：{ping:.2f}s")
-        else:
-            print(f"[X] {item['title']}  不可用")
 
-    print(f"\n可用频道：{len(all_channels_with_speed)} 条\n")
+# 3. 动态生成中文电影 / 电视剧总入口
+cn_vod_lines = build_dynamic_cn_vod(all_channels_with_speed)
 
-    # 3. 动态生成中文电影 / 电视剧总入口
-    cn_vod_lines = build_dynamic_cn_vod(all_channels_with_speed)
+with open("cn_vod_live.m3u", "w", encoding="utf-8") as f:
+    f.writelines(cn_vod_lines)
 
-    with open("cn_vod_live.m3u", "w", encoding="utf-8") as f:
-        f.writelines(cn_vod_lines)
+print("已生成: cn_vod_live.m3u\n")
 
-    print("已生成：cn_vod_live.m3u\n")
+
+# 4. 统计分类数量
 total_channels = len(all_channels_with_speed)
-
 movie_count = len(movie_channels)
 drama_count = len(drama_channels)
 hk_count = len(hk_channels)
@@ -304,6 +302,8 @@ tw_count = len(tw_channels)
 oversea_count = len(oversea_channels)
 no_shopping_count = len(no_shopping_channels)
 
+
+# 5. 生成 README 和 HTML
 generate_readme_and_html(
     total_channels,
     movie_count,
