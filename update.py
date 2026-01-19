@@ -236,7 +236,7 @@ def main():
 
     all_channels = []
 
-    # 1. 收集所有频道
+    # 1. 扫描当前目录所有频道
 all_channels = []
 
 for filename in os.listdir("."):
