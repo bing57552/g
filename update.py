@@ -1,100 +1,159 @@
-# -*- coding: utf-8 -*-
-"""
-update.py —— 最终稳定成品版
-GitHub Actions / 本地 Python 3.9+ 可运行
-"""
-
+import os
 import time
 import requests
-from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-TIMEOUT = 5
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-BLOCK_KEYWORDS = ["购物", "导购", "理财", "股票", "期货", "博彩"]
+TIMEOUT = 3
+MAX_WORKERS = 20
 
-# ================= 工具函数 =================
 
-def has_chinese(text: str) -> bool:
-    return any('\u4e00' <= c <= '\u9fff' for c in text)
+# ========================
+# 工具函数
+# ========================
 
-def is_blocked(title: str) -> bool:
-    return any(k in title for k in BLOCK_KEYWORDS)
-
-def is_valid_stream(url: str) -> bool:
-    try:
-        r = requests.get(url, timeout=TIMEOUT, stream=True, headers=HEADERS)
-        return r.status_code in (200, 206)
-    except Exception:
-        return False
-
-def test_speed(url: str):
+def is_valid_and_speed(url):
     try:
         start = time.time()
-        r = requests.get(url, timeout=TIMEOUT, stream=True, headers=HEADERS)
-        if r.status_code not in (200, 206):
-            return None
-        for _ in r.iter_content(chunk_size=1024):
-            break
-        return time.time() - start
-    except Exception:
-        return None
+        r = requests.get(url, timeout=TIMEOUT, stream=True)
+        r.close()
+        speed = int((time.time() - start) * 1000)
+        return True, speed
+    except:
+        return False, 99999
 
-# ================= 解析 m3u =================
 
-def parse_m3u(lines):
+def read_m3u(filename):
     channels = []
-    title = None
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        if line.startswith("#EXTINF"):
-            title = line.split(",", 1)[-1].strip()
-        elif line.startswith("http") and title:
-            channels.append({"title": title, "url": line})
-            title = None
+    name = None
+
+    with open(filename, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("#EXTINF"):
+                name = line.split(",")[-1].strip()
+            elif line.startswith("http") and name:
+                channels.append({
+                    "name": name,
+                    "url": line,
+                    "source": filename
+                })
+                name = None
     return channels
 
-# ================= 每频道选最快 =================
 
-def pick_fastest_per_channel(channels):
-    best = {}
-    for ch in channels:
-        if ch.get("ping") is None:
-            continue
-        t = ch["title"]
-        if t not in best or ch["ping"] < best[t]["ping"]:
-            best[t] = ch
-    return list(best.values())
+def classify(name):
+    n = name.lower()
+    if "港" in n or "hk" in n:
+        return "hk"
+    if "台" in n or "tw" in n:
+        return "tw"
+    if "电影" in n or "movie" in n:
+        return "movie"
+    if "海外" in n or "oversea" in n:
+        return "oversea"
+    if "购物" in n:
+        return "no-shopping"
+    return "other"
 
-# ================= 主流程 =================
+
+def write_m3u(filename, channels):
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write("#EXTM3U\n")
+        for ch in channels:
+            f.write(f"#EXTINF:-1,{ch['name']}\n")
+            f.write(f"{ch['url']}\n")
+
+
+# ========================
+# 主逻辑
+# ========================
 
 def main():
-    with open("source.m3u", "r", encoding="utf-8", errors="ignore") as f:
-        lines = f.readlines()
+    print("🔍 扫描 m3u 文件...")
 
-    raw_channels = parse_m3u(lines)
+    m3u_files = [f for f in os.listdir(".") if f.endswith(".m3u")]
+
+    if not m3u_files:
+        print("❌ 未发现 m3u 文件，安全退出")
+        return
+
+    all_channels = []
+
+    for f in m3u_files:
+        print(f"📂 读取 {f}")
+        all_channels.extend(read_m3u(f))
+
+    print(f"📺 读取频道总数：{len(all_channels)}")
+
     valid_channels = []
 
-    for ch in raw_channels:
-        title = ch["title"]
-        if is_blocked(title):
-            continue
-        if not is_valid_stream(ch["url"]):
-            continue
-        ping = test_speed(ch["url"])
-        if ping is not None:
-            ch["ping"] = ping
-            valid_channels.append(ch)
+    print("⚡ 并发测速中...")
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        future_map = {
+            pool.submit(is_valid_and_speed, ch["url"]): ch
+            for ch in all_channels
+        }
 
-    best_channels = pick_fastest_per_channel(valid_channels)
+        for future in as_completed(future_map):
+            ch = future_map[future]
+            ok, speed = future.result()
+            if ok:
+                ch["speed"] = speed
+                valid_channels.append(ch)
 
-    with open("live.m3u", "w", encoding="utf-8") as f:
-        for ch in best_channels:
-            f.write(f"#EXTINF:-1,{ch['title']}\n")
-            f.write(ch["url"] + "\n")
+    valid_channels.sort(key=lambda x: x["speed"])
 
-    print("全部完成 ✅")
+    print(f"✅ 可用频道：{len(valid_channels)}")
+
+    # ========================
+    # 分类
+    # ========================
+
+    categories = {
+        "hk": [],
+        "tw": [],
+        "movie": [],
+        "oversea": [],
+        "no-shopping": [],
+        "other": []
+    }
+
+    for ch in valid_channels:
+        categories[classify(ch["name"])].append(ch)
+
+    # ========================
+    # 输出 m3u
+    # ========================
+
+    write_m3u("cn_vod_live.m3u", valid_channels)
+
+    for k, v in categories.items():
+        if v:
+            write_m3u(f"{k}.m3u", v)
+
+    # ========================
+    # README
+    # ========================
+
+    with open("README.md", "w", encoding="utf-8") as f:
+        f.write("# IPTV 自动更新（增强版）\n\n")
+        f.write(f"- 输入源文件：{len(m3u_files)}\n")
+        f.write(f"- 原始频道：{len(all_channels)}\n")
+        f.write(f"- 可用频道：{len(valid_channels)}\n\n")
+        f.write("## 分类统计\n")
+        for k, v in categories.items():
+            f.write(f"- {k}: {len(v)}\n")
+        f.write("\n## 输出文件\n")
+        f.write("- cn_vod_live.m3u\n")
+        for k in categories:
+            f.write(f"- {k}.m3u\n")
+
+    print("🎉 全部完成！")
+
+
+# ========================
+# 入口
+# ========================
 
 if __name__ == "__main__":
     main()
