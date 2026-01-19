@@ -112,7 +112,7 @@ for idx, item in enumerate(best, start=1):
     lines.append(f'#EXTINF:-1,{title}\n')
     lines.append(item["url"] + "\n")
 
-    return lines
+    
 
 # -------------------------------
 # 主流程：扫描 → 收集 → 测速 → 动态生成
