@@ -1,159 +1,227 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
+import re
 import time
+import json
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-TIMEOUT = 3
-MAX_WORKERS = 20
+# ================= 基本配置 =================
+TIMEOUT = 6
+THREADS = 30
+MAX_SOURCES = 4            # 每频道最多保留源数
+OUTPUT = "live.m3u"
+STATS_FILE = "stats.json"
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 IPTV-Private"
+}
+
+# ================= 正则 =================
+ZH_RE = re.compile(r"[\u4e00-\u9fa5]")
+CLEAN_RE = re.compile(r"(HD|高清|超清|1080P|720P|测试|备用|\s+)", re.I)
+
+# ================= 工具 =================
+def is_chinese(text):
+    return bool(ZH_RE.search(text))
 
 
-# ========================
-# 工具函数
-# ========================
-
-def is_valid_and_speed(url):
-    try:
-        start = time.time()
-        r = requests.get(url, timeout=TIMEOUT, stream=True)
-        r.close()
-        speed = int((time.time() - start) * 1000)
-        return True, speed
-    except:
-        return False, 99999
+def normalize_name(name):
+    name = CLEAN_RE.sub("", name).strip()
+    name = name.replace("＋", "+").replace("CCTV", "CCTV-")
+    name = re.sub(r"CCTV-(\d)", r"CCTV-\1", name)
+    return name
 
 
-def read_m3u(filename):
-    channels = []
+def load_stats():
+    if os.path.exists(STATS_FILE):
+        with open(STATS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+def save_stats(stats):
+    with open(STATS_FILE, "w", encoding="utf-8") as f:
+        json.dump(stats, f, ensure_ascii=False, indent=2)
+
+
+# ================= M3U =================
+def scan_m3u_files():
+    return [f for f in os.listdir(".") if f.endswith(".m3u") and f != OUTPUT]
+
+
+def parse_m3u(file):
+    items = []
     name = None
-
-    with open(filename, "r", encoding="utf-8", errors="ignore") as f:
+    with open(file, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
             line = line.strip()
             if line.startswith("#EXTINF"):
                 name = line.split(",")[-1].strip()
-            elif line.startswith("http") and name:
-                channels.append({
-                    "name": name,
-                    "url": line,
-                    "source": filename
-                })
+            elif line.startswith("http"):
+                if name:
+                    items.append((name, line))
                 name = None
-    return channels
+    return items
 
 
-def classify(name):
-    n = name.lower()
-    if "港" in n or "hk" in n:
-        return "hk"
-    if "台" in n or "tw" in n:
-        return "tw"
-    if "电影" in n or "movie" in n:
-        return "movie"
-    if "海外" in n or "oversea" in n:
-        return "oversea"
-    if "购物" in n:
-        return "no-shopping"
-    return "other"
+# ================= 质量检测 =================
+def test_source(task):
+    name, url = task
+    try:
+        start = time.time()
+        r = requests.get(url, headers=HEADERS, timeout=TIMEOUT, stream=True)
+        if r.status_code != 200:
+            return None
 
+        first_chunk = None
+        size = 0
+        read_start = time.time()
 
-def write_m3u(filename, channels):
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write("#EXTM3U\n")
-        for ch in channels:
-            f.write(f"#EXTINF:-1,{ch['name']}\n")
-            f.write(f"{ch['url']}\n")
+        for chunk in r.iter_content(chunk_size=4096):
+            if not chunk:
+                continue
 
+            now = time.time()
+            if first_chunk is None:
+                first_chunk = now - start
 
-# ========================
-# 主逻辑
-# ========================
+            size += len(chunk)
+            if now - read_start > 10:
+                break
 
-def main():
-    print("🔍 扫描 m3u 文件...")
+        if first_chunk is None:
+            return None
 
-    m3u_files = [f for f in os.listdir(".") if f.endswith(".m3u")]
+        duration = time.time() - start
+        bitrate = (size * 8) / duration / 1000  # kbps
 
-    if not m3u_files:
-        print("❌ 未发现 m3u 文件，安全退出")
-        return
+        # 硬性淘汰条件
+        if first_chunk > 1.5 or bitrate < 1500:
+            return None
 
-    all_channels = []
+        container = "ts" if ".ts" in url or ".flv" in url else "hls"
 
-    for f in m3u_files:
-        print(f"📂 读取 {f}")
-        all_channels.extend(read_m3u(f))
-
-    print(f"📺 读取频道总数：{len(all_channels)}")
-
-    valid_channels = []
-
-    print("⚡ 并发测速中...")
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        future_map = {
-            pool.submit(is_valid_and_speed, ch["url"]): ch
-            for ch in all_channels
+        return {
+            "name": name,
+            "url": url,
+            "first": round(first_chunk, 2),
+            "bitrate": int(bitrate),
+            "container": container
         }
 
-        for future in as_completed(future_map):
-            ch = future_map[future]
-            ok, speed = future.result()
-            if ok:
-                ch["speed"] = speed
-                valid_channels.append(ch)
-
-    valid_channels.sort(key=lambda x: x["speed"])
-
-    print(f"✅ 可用频道：{len(valid_channels)}")
-
-    # ========================
-    # 分类
-    # ========================
-
-    categories = {
-        "hk": [],
-        "tw": [],
-        "movie": [],
-        "oversea": [],
-        "no-shopping": [],
-        "other": []
-    }
-
-    for ch in valid_channels:
-        categories[classify(ch["name"])].append(ch)
-
-    # ========================
-    # 输出 m3u
-    # ========================
-
-    write_m3u("cn_vod_live.m3u", valid_channels)
-
-    for k, v in categories.items():
-        if v:
-            write_m3u(f"{k}.m3u", v)
-
-    # ========================
-    # README
-    # ========================
-
-    with open("README.md", "w", encoding="utf-8") as f:
-        f.write("# IPTV 自动更新（增强版）\n\n")
-        f.write(f"- 输入源文件：{len(m3u_files)}\n")
-        f.write(f"- 原始频道：{len(all_channels)}\n")
-        f.write(f"- 可用频道：{len(valid_channels)}\n\n")
-        f.write("## 分类统计\n")
-        for k, v in categories.items():
-            f.write(f"- {k}: {len(v)}\n")
-        f.write("\n## 输出文件\n")
-        f.write("- cn_vod_live.m3u\n")
-        for k in categories:
-            f.write(f"- {k}.m3u\n")
-
-    print("🎉 全部完成！")
+    except:
+        return None
 
 
-# ========================
-# 入口
-# ========================
+# ================= 谁稳谁上评分 =================
+def calc_score(stat):
+    total = stat["ok"] + stat["fail"]
+    if total == 0:
+        return 0
+
+    success = stat["ok"] / total
+    score = success * 60
+
+    # 首包
+    if stat["avg_first"] <= 0.8:
+        score += 20
+    elif stat["avg_first"] <= 1.2:
+        score += 15
+    elif stat["avg_first"] <= 1.5:
+        score += 10
+
+    # 码率
+    if stat["avg_bitrate"] >= 3000:
+        score += 15
+    elif stat["avg_bitrate"] >= 2000:
+        score += 10
+    elif stat["avg_bitrate"] >= 1500:
+        score += 5
+
+    # 最近成功
+    if time.time() - stat["last_ok"] < 3600:
+        score += 5
+
+    return round(score, 1)
+
+
+# ================= 主流程 =================
+def main():
+    print("🚀 IPTV『谁稳谁上』终极版启动")
+
+    stats = load_stats()
+    pool = {}
+
+    # 收集源
+    for file in scan_m3u_files():
+        for raw, url in parse_m3u(file):
+            if not is_chinese(raw):
+                continue
+            name = normalize_name(raw)
+            pool.setdefault(name, set()).add(url)
+
+    # 测试
+    results = {}
+    with ThreadPoolExecutor(max_workers=THREADS) as ex:
+        futures = [
+            ex.submit(test_source, (name, url))
+            for name, urls in pool.items()
+            for url in urls
+        ]
+
+        for f in as_completed(futures):
+            r = f.result()
+            if not r:
+                continue
+            results.setdefault(r["name"], []).append(r)
+
+    # 更新统计
+    for name, sources in results.items():
+        stats.setdefault(name, {})
+        for s in sources:
+            u = s["url"]
+            stat = stats[name].setdefault(u, {
+                "ok": 0,
+                "fail": 0,
+                "avg_first": s["first"],
+                "avg_bitrate": s["bitrate"],
+                "last_ok": 0
+            })
+            stat["ok"] += 1
+            stat["avg_first"] = (stat["avg_first"] + s["first"]) / 2
+            stat["avg_bitrate"] = (stat["avg_bitrate"] + s["bitrate"]) / 2
+            stat["last_ok"] = time.time()
+
+    # 排序 & 输出
+    with open(OUTPUT, "w", encoding="utf-8") as f:
+        f.write("#EXTM3U\n")
+        idx = 1
+
+        for name in sorted(stats.keys()):
+            ranked = []
+            for url, stat in stats[name].items():
+                score = calc_score(stat)
+                if score > 0:
+                    ranked.append((score, url))
+
+            if not ranked:
+                continue
+
+            ranked.sort(reverse=True)
+            ranked = ranked[:MAX_SOURCES]
+
+            f.write(f"#EXTINF:-1,{idx}. {name}\n")
+            for _, url in ranked:
+                f.write(url + "\n")
+            idx += 1
+
+    save_stats(stats)
+    print("✅ 完成：主源 / 备用源 已动态生成")
+    print("📺 TVBox / iOTV 自动切换生效")
+
 
 if __name__ == "__main__":
     main()
