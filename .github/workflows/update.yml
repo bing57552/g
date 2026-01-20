@@ -1,38 +1,54 @@
-
 name: IPTV-Auto-Update
 
 on:
   schedule:
-    - cron: '0 22 * * *'
-  workflow_dispatch:
+    - cron: '0 0 * * *'  # 每天 UTC 0点自动运行
+  workflow_dispatch:      # 允许手动触发
+
+# 必须声明权限，否则私有仓库无法发布 Pages
+permissions:
+  contents: write
+  pages: write
+  id-token: write
 
 jobs:
   update:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
       - name: 检出代码
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: 安装 Python 依赖
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-      - name: 执行抓取脚本
+      - name: 安装依赖
+        run: pip install requests
+
+      # 阶段 1：生成最新的直播源文件
+      - name: 运行抓取脚本
         run: python update.py
 
+      # 阶段 2：将新生成的文件推送到仓库分支
       - name: 提交并推送更改
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
-          # 核心修正：移除 index.html，仅添加存在的 m3u 和 md 文件
           git add *.m3u README.md || true
-          
-          # 即使没有变化也不报错
-          git commit -m "Update IPTV IPv4" -a || echo "No changes"
-          
+          git commit -m "Update IPTV: Add high-definition multi-line sources" -a || echo "No changes"
           git push origin main || git push
+
+      # 阶段 3：将文件发布为公开链接 (GitHub Pages)
+      - name: 配置部署环境
+        uses: actions/configure-pages@v4
+
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+          pattern: 'all.m3u'
+
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
