@@ -25,13 +25,14 @@ def check_url(item):
 def main():
     # 【最关键一步】：必须包含这 6 个链接，否则永远只有 3 个频道
     sources = [
-        "https://raw.githubusercontent.com/Guovin/TV/gd/output/result.m3u",
-        "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/ipv6.m3u",
-        "https://raw.githubusercontent.com/youshandefeiyang/IPTV/main/main.m3u",
-        "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/hk.m3u",
-        "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/tw.m3u",
-        "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/my.m3u"
-    ]
+    "https://raw.githubusercontent.com/Guovin/TV/gd/output/result.m3u",
+    "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/ipv6.m3u",
+    "https://raw.githubusercontent.com/youshandefeiyang/IPTV/main/main.m3u",
+    "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/hk.m3u",
+    "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/tw.m3u",
+    "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/my.m3u"
+]
+
 
     temp_list = []
     print("正在获取源数据...")
