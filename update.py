@@ -33,15 +33,15 @@ def check_url(item):
 # 3. 抓取与多线路生成逻辑
 def main():
     # 备用源列表：一个失效会自动从下一个抓取
-    sources = [
+            sources = [
             "https://raw.githubusercontent.com/Guovin/TV/gd/output/result.m3u",
             "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/ipv6.m3u",
             "https://raw.githubusercontent.com/youshandefeiyang/IPTV/main/main.m3u",
             "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/hk.m3u",
             "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/tw.m3u",
             "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/my.m3u"
+        ]
 
-    ]
     
     temp_list = []
     for s_url in sources:
