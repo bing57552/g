@@ -1,15 +1,16 @@
+
 name: IPTV-Auto-Update
 
 on:
   schedule:
-    - cron: '0 22 * * *' # 每天北京时间早上 6 点运行
-  workflow_dispatch:      # 允许手动点击运行
+    - cron: '0 22 * * *'
+  workflow_dispatch:
 
 jobs:
   update:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # 显式声明写入权限，解决 128 错误
+      contents: write
 
     steps:
       - name: 检出代码
@@ -28,11 +29,10 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # 核心修正：仅添加您的目录中实际存在的 m3u 和 md 文件
-          # 彻底移除会导致报错的 index.html
+          # 核心修正：移除 index.html，仅添加存在的 m3u 和 md 文件
           git add *.m3u README.md || true
           
-          # 如果没有内容变化则不报错，防止 Exit Code 1
-          git commit -m "Update HD IPTV IPv4" -a || echo "No changes to commit"
+          # 即使没有变化也不报错
+          git commit -m "Update IPTV IPv4" -a || echo "No changes"
           
-          git push
+          git push origin main || git push
