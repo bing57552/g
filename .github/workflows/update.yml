@@ -1,33 +1,46 @@
-name: 自动更新 IPTV 文件
+
+name: IPTV-Auto-Update
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *'  # 每天凌晨 2 点自动运行
+    - cron: '0 22 * * *' # 北京时间每天早上 6 点自动运行
+  workflow_dispatch:      # 允许您在 Actions 页面手动点击运行
 
 jobs:
-  build:
+  update:
     runs-on: ubuntu-latest
+    # 显式声明权限，确保可以推送文件
+    permissions:
+      contents: write
 
     steps:
-    - name: 拉取仓库
-      uses: actions/checkout@v3
+      - name: 检出代码
+        uses: actions/checkout@v3
 
-    - name: 设置 Python 环境
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: 安装 Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-    - name: 安装依赖
-      run: pip install requests
+      - name: 安装 requests 依赖包
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
 
-    - name: 运行 update.py
-      run: python update.py
+      - name: 执行抓取脚本
+        run: python update.py
 
-    - name: 提交更新文件
-      run: |
-        git config --global user.name "GitHub Action"
-        git config --global user.email "action@github.com"
-        git add *.m3u README.md index.html
-        git commit -m "自动更新频道列表和入口页"
-        git push
+      - name: 提交并推送更改
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # 关键点 1：只添加存在的 m3u 和 md 文件，解决 128 报错
+          # 这里移除了 index.html，因为它在您的目录中不存在
+          git add *.m3u README.md || true
+          
+          # 关键点 2：如果没有变化则不报错，解决 Exit Code 1
+          git commit -m "自动同步最新高清IPv4频道" -a || echo "没有检测到内容变化，跳过提交"
+          
+          # 关键点 3：推送至远程仓库
+          git push origin main || git push
