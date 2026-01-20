@@ -2,25 +2,14 @@ name: IPTV-Auto-Update
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 每天 UTC 0点自动运行
-  workflow_dispatch:      # 允许手动触发
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
-# 必须声明权限，否则私有仓库无法发布 Pages
 permissions:
   contents: write
   pages: write
   id-token: write
 
-
-permissions:
-  contents: write    # 允许脚本将生成的 all.m3u 推送到仓库
-  pages: write       # 允许 Actions 发布文件到 GitHub Pages
-  id-token: write    # 允许安全验证部署请求
-
-jobs:
-  update:
-    runs-on: ubuntu-latest
-    # ... 后面的代码保持不变 ...
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -36,20 +25,17 @@ jobs:
       - name: 安装依赖
         run: pip install requests
 
-      # 阶段 1：生成最新的直播源文件
       - name: 运行抓取脚本
         run: python update.py
 
-      # 阶段 2：将新生成的文件推送到仓库分支
       - name: 提交并推送更改
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add *.m3u README.md || true
-          git commit -m "Update IPTV: Add high-definition multi-line sources" -a || echo "No changes"
+          git commit -m "Update IPTV" -a || echo "No changes"
           git push origin main || git push
 
-      # 阶段 3：将文件发布为公开链接 (GitHub Pages)
       - name: 配置部署环境
         uses: actions/configure-pages@v4
 
