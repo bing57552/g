@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 KEYWORDS = [
     "CatchPlay", "CHC", "动作", "家庭影院", "影迷焦点", 
     "Astro", "华丽", "欢喜", "Pop", "TVB", "翡翠", 
-    "星河", "无线", "myTV", "SUPER", "美亚", "八大", 
+    "星河", "无线", "myTV", "SUPER", "美亚", "八大", "Disney+", "Netflix", 
     "GTV", "高清", "超清", "1080P", "4K", "蓝光"
 ]
 
