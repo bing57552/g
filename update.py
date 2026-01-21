@@ -3,7 +3,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 # 1. 核心频道库：包含你想要的所有大台
-KEYWORDS = ["CCTV "，"卫视"，"Astro", "TVB", "翡翠", "myTV", "SUPER", "美亚", "Disney+", "Netflix", "GTV", "八大", "Pop", "CHC", "CatchPlay"]
+KEYWORDS = ["CCTV ","卫视","Astro", "TVB", "翡翠","myTV", "SUPER", "美亚", "Disney+", "Netflix", "GTV", "八大", "Pop", "CHC", "CatchPlay"]
 
 def check_url(item):
     name_info, url = item
