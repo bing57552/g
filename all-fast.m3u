@@ -1,0 +1,13 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="TVBS Asia" tvg-name="TVBS Asia" tvg-logo="https://raw.githubusercontent.com/你的用户名/你的仓库/main/logo/TVBSAsia.png" group-title="其他",TVBS Asia
+http://38.64.72.148/hls/modn/list/4005/playlist.m3u8
+#EXTINF:-1 tvg-id="Channel 8" tvg-name="Channel 8" tvg-logo="https://raw.githubusercontent.com/你的用户名/你的仓库/main/logo/Channel8.png" group-title="其他",Channel 8
+https://app.viloud.tv/hls/channel/57148804a268f59e0c1af0c1b67a2f7e.m3u8
+#EXTINF:-1 tvg-id="阳光卫视" tvg-name="阳光卫视" tvg-logo="https://raw.githubusercontent.com/你的用户名/你的仓库/main/logo/阳光卫视.png" group-title="卫视频道",阳光卫视
+https://stream.chinasuntv.com/680k/mid_video_index.m3u8
+#EXTINF:-1 tvg-id="阳光卫视" tvg-name="阳光卫视" tvg-logo="https://raw.githubusercontent.com/你的用户名/你的仓库/main/logo/阳光卫视.png" group-title="卫视频道",阳光卫视
+https://stream.chinasuntv.com/680k/mid_video_index.m3u8
+#EXTINF:-1 tvg-id="Harbin Movie Channel" tvg-name="Harbin Movie Channel" tvg-logo="https://raw.githubusercontent.com/你的用户名/你的仓库/main/logo/HarbinMovieChannel.png" group-title="其他",Harbin Movie Channel
+https://stream.hrbtv.net/yspd/playlist.m3u8
+#EXTINF:-1 tvg-id="Bread TV" tvg-name="Bread TV" tvg-logo="https://raw.githubusercontent.com/你的用户名/你的仓库/main/logo/BreadTV.png" group-title="其他",Bread TV
+https://video.bread-tv.com:8091/hls-live24/online/index.m3u8
