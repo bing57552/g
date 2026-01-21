@@ -4,6 +4,7 @@ import json
 import requests
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 # ================= 基本配置 =================
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
@@ -16,6 +17,7 @@ IGNORE_FILES = {OUT_ALL, OUT_FAST, OUT_FULL}
 
 TIMEOUT = 10
 MAX_FAIL = 3
+MAX_WORKERS = 15  # 并发测速数量（10~20 推荐）
 
 # EPG
 EPG_URL = "https://epg.112114.xyz/pp.xml.gz"
@@ -97,16 +99,14 @@ def parse_m3u(path):
     i = 0
     while i < len(lines):
         if lines[i].startswith("#EXTINF") and i + 1 < len(lines):
-            extinf = lines[i]
             url = lines[i + 1]
+            raw_name = lines[i].split(",", 1)[-1].strip()
 
-            raw_name = extinf.split(",", 1)[-1].strip()
             if is_blocked(raw_name):
                 i += 2
                 continue
 
             name = normalize_name(raw_name)
-
             channels.setdefault(name, []).append({
                 "url": url,
                 "speed": None
@@ -122,12 +122,28 @@ for f in os.listdir(ROOT):
         parse_m3u(os.path.join(ROOT, f))
 
 
-# ================= 测速 + 多次失败统计 =================
+# ================= 并发测速 + 失败统计 =================
+def speed_task(name, url):
+    return name, url, test_speed(url)
+
+
+tasks = []
+with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    for name, items in channels.items():
+        for item in items:
+            tasks.append(executor.submit(speed_task, name, item["url"]))
+
+results = {}
+for future in as_completed(tasks):
+    name, url, speed = future.result()
+    results.setdefault(name, {})[url] = speed
+
+
 for name in list(channels.keys()):
     valid = []
     for item in channels[name]:
         url = item["url"]
-        speed = test_speed(url)
+        speed = results.get(name, {}).get(url)
 
         if speed is None:
             fail_cache[url] = fail_cache.get(url, 0) + 1
@@ -153,7 +169,6 @@ def write_m3u(filename, mode):
         f.write(f'#EXTM3U url-tvg="{EPG_URL}"\n')
         for name, items in channels.items():
             tvg = epg_id(name)
-
             if mode == "fast":
                 items = items[:1]
 
@@ -167,4 +182,4 @@ write_m3u(OUT_ALL, "all")
 write_m3u(OUT_FAST, "fast")
 write_m3u(OUT_FULL, "full")
 
-print(f"✅ 完成：{len(channels)} 个频道（EPG 已注入｜名称已统一）")
+print(f"✅ 完成：{len(channels)} 个频道（并发测速 + EPG + 自愈）")
