@@ -1,101 +1,73 @@
+# update.py
 import os
 import re
-import time
-import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# ================= 基本配置 =================
-TIMEOUT = 10          # 连接超时（秒）
-THREADS = 20          # 并发测速线程
-MAX_KEEP = 3          # 每个频道最多保留几个源
 OUT_FILE = "all.m3u"
 
-EPG_URL = "https://epg.112114.xyz/pp.xml"
-
-# 购物 / 广告过滤
-BLOCK_KEYWORDS = [
-    "购物", "广告", "导购", "直销", "带货",
-    "SHOP", "Shopping", "TV Mall"
-]
-
-# 频道名统一（重点）
-NAME_MAP = {
-    "Channel8": "阳光卫视",
-    "Channel 8": "阳光卫视",
-    "SUN TV": "阳光卫视",
-    "Sun TV": "阳光卫视",
-    "SUNTv": "阳光卫视",
-}
-
-# ================= 工具函数 =================
-def normalize_name(name):
-    # 统一大小写
-    name = name.upper()
-
-    # 去掉括号及括号内内容
-    name = re.sub(r"[（(【\[].*?[】\])）]", "", name)
-
-    # 去常见无关词（统一规则，不针对具体频道）
-    name = re.sub(
-        r"(HD|高清|超清|4K|1080P|720P|蓝光|备用|测试|线路|源)",
-        "",
-        name
+# ===== 频道名统一 =====
+def normalize_name(name: str) -> str:
+    return (
+        name.replace("HD", "")
+            .replace("高清", "")
+            .replace("标清", "")
+            .replace("频道", "")
+            .replace(" ", "")
+            .strip()
     )
 
-    # CCTV 编号统一
-    name = re.sub(r"CCTV[\s\-]*0*(\d+)", r"CCTV\1", name)
+# ===== 购物 / 广告 过滤规则 =====
+BLOCK_PATTERNS = [
+    r"购物", r"购", r"Shopping", r"SHOP",
+    r"广告", r"AD$", r"Promo",
+    r"导购", r"特卖", r"优选",
+    r"购物指南", r"电视购物"
+]
 
-    # 删除所有非中文、字母、数字
-    name = re.sub(r"[^\u4e00-\u9fa5A-Z0-9]", "", name)
+def is_blocked(name: str) -> bool:
+    for p in BLOCK_PATTERNS:
+        if re.search(p, name, re.IGNORECASE):
+            return True
+    return False
 
-    return name.strip()
+channels = {}  # {频道名: set(url)}
 
-# ================= 读取所有 m3u =================
-channels = {}  # {频道名: set(urls)}
-
+# ===== 扫描所有 m3u =====
 for root, _, files in os.walk("."):
     for file in files:
-        if file.endswith(".m3u") and file != OUT_FILE:
-            path = os.path.join(root, file)
-            with open(path, encoding="utf-8", errors="ignore") as f:
-                lines = f.read().splitlines()
+        if not file.endswith(".m3u"):
+            continue
+        if file == OUT_FILE:
+            continue
 
-            current = None
-            for line in lines:
-                line = line.strip()
-                if line.startswith("#EXTINF"):
-                    name = line.split(",")[-1]
-                    name = normalize_name(name)              
-                    current = name
-                   channels.setdefault(current, set())
-                elif line.startswith("http") and current:
-                    channels[current].add(line)
+        path = os.path.join(root, file)
+        with open(path, encoding="utf-8", errors="ignore") as f:
+            lines = f.read().splitlines()
 
-# ================= 自动测速 + 排序 =================
-def speed_sort(urls: set):
-    speeds = []
-    with ThreadPoolExecutor(max_workers=THREADS) as pool:
-        futures = {pool.submit(test_speed, u): u for u in urls}
-        for f in as_completed(futures):
-            u = futures[f]
-            s = f.result()
-            if s is not None:
-                speeds.append((s, u))
-    speeds.sort(key=lambda x: x[0])
-    return [u for _, u in speeds[:MAX_KEEP]]
+        current = None
+        for line in lines:
+            line = line.strip()
 
-final_channels = {}
-for name, urls in channels.items():
-    fast = speed_sort(urls)
-    if fast:
-        final_channels[name] = fast
+            if line.startswith("#EXTINF"):
+                name = line.split(",")[-1]
+                name = normalize_name(name)
 
-# ================= 输出 all.m3u =================
-with open(OUT_FILE, "w", encoding="utf-8") as f:
-    f.write(f'#EXTM3U url-tvg="{EPG_URL}"\n')
-    for name, urls in final_channels.items():
-        f.write(f"#EXTINF:-1,{name}\n")
-        for u in urls:
-            f.write(u + "\n")
+                # 🚫 过滤广告 / 购物
+                if is_blocked(name):
+                    current = None
+                    continue
 
-print(f"✅ 完成：{len(final_channels)} 个频道（自动测速 + 多源合并）")
+                current = name
+                channels.setdefault(current, set())
+
+            elif line.startswith("http") and current:
+                channels[current].add(line)
+
+# ===== 输出 all.m3u =====
+with open(OUT_FILE, "w", encoding="utf-8") as out:
+    out.write("#EXTM3U\n")
+    for name in sorted(channels):
+        for url in sorted(channels[name]):
+            out.write(f"#EXTINF:-1,{name}\n")
+            out.write(f"{url}\n")
+
+print(f"完成：保留 {len(channels)} 个频道（已去广告/购物）")
