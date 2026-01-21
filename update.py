@@ -65,12 +65,9 @@ for root, _, files in os.walk("."):
                 line = line.strip()
                 if line.startswith("#EXTINF"):
                     name = line.split(",")[-1]
-                    name = normalize_name(name)
-                    if blocked(name):
-                        current = None
-                        continue
+                    name = normalize_name(name)              
                     current = name
-                    channels.setdefault(current, set())
+                   channels.setdefault(current, set())
                 elif line.startswith("http") and current:
                     channels[current].add(line)
 
