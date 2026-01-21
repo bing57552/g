@@ -1,132 +1,170 @@
 import os
-import re
 import time
+import json
 import requests
-import concurrent.futures
-from collections import defaultdict
+import re
 
-# ======================
-# 配置区
-# ======================
-MAX_KEEP_PER_CHANNEL = 3
-FAILED_CACHE_FILE = "failed_cache.txt"
-LOGO_BASE_URL = "https://raw.githubusercontent.com/你的用户名/你的仓库/main/logo/"
+# ================= 基本配置 =================
+ROOT = os.path.dirname(os.path.abspath(__file__))
 
-if os.getenv("GITHUB_ACTIONS") == "true":
-    TIMEOUT = 8
-    MAX_WORKERS = 10
+OUT_ALL = "all.m3u"
+OUT_FAST = "all-fast.m3u"
+OUT_FULL = "all-full.m3u"
+FAIL_CACHE_FILE = "fail_cache.json"
+
+IGNORE_FILES = {OUT_ALL, OUT_FAST, OUT_FULL}
+
+TIMEOUT = 10
+MAX_FAIL = 3
+
+# EPG
+EPG_URL = "https://epg.112114.xyz/pp.xml.gz"
+
+# 去购物 / 广告
+BLOCK_KEYWORDS = [
+    "购物", "导购", "广告", "促销", "带货", "直销",
+    "SHOP", "Shopping", "TV Mall"
+]
+
+channels = {}
+
+# ================= 失败缓存 =================
+if os.path.exists(FAIL_CACHE_FILE):
+    with open(FAIL_CACHE_FILE, "r", encoding="utf-8") as f:
+        fail_cache = json.load(f)
 else:
-    TIMEOUT = 10
-    MAX_WORKERS = 20
+    fail_cache = {}
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-# ======================
-# 工具函数
-# ======================
-def clean_channel_name(name):
-    name = re.sub(r"(高清|HD|FHD|4K|直播源?|在线|\(.*?\))", "", name, flags=re.I)
-    return re.sub(r"\s+", " ", name).strip()
+def save_fail_cache():
+    with open(FAIL_CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(fail_cache, f, ensure_ascii=False, indent=2)
 
-def detect_group(name):
-    if "CCTV" in name:
-        return "央视频道"
-    if "卫视" in name:
-        return "卫视频道"
-    if any(x in name for x in ("翡翠", "明珠", "本港台", "香港")):
-        return "港台频道"
-    if any(x in name for x in ("东森", "中天", "三立")):
-        return "台湾频道"
-    if any(x in name for x in ("HBO", "FOX", "CNN")):
-        return "海外频道"
-    if "电影" in name:
-        return "电影频道"
-    return "其他"
 
-def build_extinf(raw_extinf):
-    name = raw_extinf.split(",")[-1]
-    clean_name = clean_channel_name(name)
-    group = detect_group(clean_name)
-    tvg_id = clean_name
-    logo = LOGO_BASE_URL + clean_name.replace(" ", "") + ".png"
+# ================= 工具函数 =================
+def is_blocked(name):
+    return any(k.lower() in name.lower() for k in BLOCK_KEYWORDS)
 
-    return (
-        f'#EXTINF:-1 tvg-id="{tvg_id}" '
-        f'tvg-name="{clean_name}" '
-        f'tvg-logo="{logo}" '
-        f'group-title="{group}",{clean_name}'
-    )
 
-# ======================
-# 流检测
-# ======================
-def check_stream(extinf, url):
-    start = time.time()
+def normalize_name(name: str) -> str:
+    name = name.upper()
+    name = re.sub(r"高清|HD|FHD|4K|频道", "", name)
+    name = name.replace(" ", "").replace("－", "-")
+
+    m = re.match(r"CCTV[-]?(\d+)", name)
+    if m:
+        return f"CCTV-{m.group(1)}"
+
+    if name.endswith("卫视"):
+        return name
+
+    return name
+
+
+def epg_id(name: str) -> str:
+    m = re.match(r"CCTV-(\d+)", name)
+    if m:
+        return f"CCTV-{m.group(1)}"
+
+    if name.endswith("卫视"):
+        return name
+
+    MAP = {
+        "TVBS新闻": "TVBS新聞",
+        "凤凰中文": "凤凰中文台",
+        "凤凰资讯": "凤凰资讯台",
+    }
+    return MAP.get(name, name)
+
+
+def test_speed(url):
     try:
-        r = requests.get(url, timeout=TIMEOUT, stream=True, headers=HEADERS)
-        if r.status_code != 200:
-            return None
-        ctype = r.headers.get("Content-Type", "").lower()
-        if not any(x in ctype for x in ("mpegurl", "video", "octet-stream", "mp2t")):
-            return None
-        latency = round(time.time() - start, 3)
-        return extinf, url, latency
-    except Exception:
+        start = time.time()
+        r = requests.get(url, stream=True, timeout=TIMEOUT)
+        r.raise_for_status()
+        for _ in r.iter_content(chunk_size=8192):
+            break
+        return time.time() - start
+    except:
         return None
 
-# ======================
-# 解析 m3u
-# ======================
+
+# ================= 解析 m3u =================
 def parse_m3u(path):
-    with open(path, encoding="utf-8", errors="ignore") as f:
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
         lines = [l.strip() for l in f if l.strip()]
+
     i = 0
-    while i < len(lines) - 1:
-        if lines[i].startswith("#EXTINF"):
-            yield lines[i], lines[i + 1]
+    while i < len(lines):
+        if lines[i].startswith("#EXTINF") and i + 1 < len(lines):
+            extinf = lines[i]
+            url = lines[i + 1]
+
+            raw_name = extinf.split(",", 1)[-1].strip()
+            if is_blocked(raw_name):
+                i += 2
+                continue
+
+            name = normalize_name(raw_name)
+
+            channels.setdefault(name, []).append({
+                "url": url,
+                "speed": None
+            })
             i += 2
         else:
             i += 1
 
-# ======================
-# 主流程
-# ======================
-def main():
-    tasks = []
-    channel_map = defaultdict(list)
 
-    for file in os.listdir("."):
-        if not file.endswith(".m3u") or file.startswith("all-"):
-            continue
+# ================= 扫描所有 m3u =================
+for f in os.listdir(ROOT):
+    if f.endswith(".m3u") and f not in IGNORE_FILES:
+        parse_m3u(os.path.join(ROOT, f))
 
-        for raw_extinf, url in parse_m3u(file):
-            if url.startswith("http"):
-                unified_extinf = build_extinf(raw_extinf)
-                tasks.append((unified_extinf, url))
 
-    with concurrent.futures.ThreadPoolExecutor(MAX_WORKERS) as ex:
-        futures = [ex.submit(check_stream, e, u) for e, u in tasks]
-        for f in concurrent.futures.as_completed(futures):
-            r = f.result()
-            if r:
-                extinf, url, latency = r
-                channel_map[extinf].append((latency, url))
+# ================= 测速 + 多次失败统计 =================
+for name in list(channels.keys()):
+    valid = []
+    for item in channels[name]:
+        url = item["url"]
+        speed = test_speed(url)
 
-    # 输出 all-fast.m3u
-    with open("all-fast.m3u", "w", encoding="utf-8") as f:
-        f.write("#EXTM3U\n")
-        for extinf, sources in channel_map.items():
-            for _, url in sorted(sources)[:MAX_KEEP_PER_CHANNEL]:
-                f.write(extinf + "\n" + url + "\n")
+        if speed is None:
+            fail_cache[url] = fail_cache.get(url, 0) + 1
+        else:
+            fail_cache[url] = 0
+            item["speed"] = speed
+            valid.append(item)
 
-    # 输出 all-full.m3u
-    with open("all-full.m3u", "w", encoding="utf-8") as f:
-        f.write("#EXTM3U\n")
-        for extinf, sources in channel_map.items():
-            for _, url in sorted(sources):
-                f.write(extinf + "\n" + url + "\n")
+    valid = [i for i in valid if fail_cache.get(i["url"], 0) < MAX_FAIL]
 
-    print("✅ 频道名 / 分组 / logo / tvg-id 已自动统一")
+    if not valid:
+        del channels[name]
+    else:
+        valid.sort(key=lambda x: x["speed"])
+        channels[name] = valid
 
-if __name__ == "__main__":
-    main()
+save_fail_cache()
+
+
+# ================= 写入 m3u =================
+def write_m3u(filename, mode):
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(f'#EXTM3U url-tvg="{EPG_URL}"\n')
+        for name, items in channels.items():
+            tvg = epg_id(name)
+
+            if mode == "fast":
+                items = items[:1]
+
+            for i in items:
+                extinf = f'#EXTINF:-1 tvg-id="{tvg}" tvg-name="{tvg}",{name}'
+                f.write(extinf + "\n")
+                f.write(i["url"] + "\n")
+
+
+write_m3u(OUT_ALL, "all")
+write_m3u(OUT_FAST, "fast")
+write_m3u(OUT_FULL, "full")
+
+print(f"✅ 完成：{len(channels)} 个频道（EPG 已注入｜名称已统一）")
