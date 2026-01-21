@@ -3,7 +3,7 @@ import time
 import json
 import requests
 import re
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 # ================= 基本配置 =================
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
