@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # 自动清理：保留最近 6 条运行记录
+      # 自动清理：保留最近 5 条运行记录
       - name: Delete old workflow runs
         uses: Mattraer/delete-workflow-runs-action@v2
         with:
