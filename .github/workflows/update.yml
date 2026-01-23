@@ -5,19 +5,28 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch:
 
+permissions:
+  actions: write
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
+
+      # 自动清理：保留最近 6 条运行记录
+      - name: Delete old workflow runs
+        uses: Mattraer/delete-workflow-runs-action@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 6
 
       - uses: actions/setup-python@v4
         with:
           python-version: "3.x"
-
-      - name: Install dependencies
-        run: pip install qrcode pillow
 
       - name: Run update script
         run: python update.py
@@ -27,5 +36,5 @@ jobs:
           git config --local user.name "github-actions"
           git config --local user.email "github-actions@github.com"
           git add .
-          git commit -m "Zero-Error Update: Global Shopping Filtered" || echo "No changes to commit"
+          git commit -m "Auto Filter & Clean" || echo "No changes"
           git push
