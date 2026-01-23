@@ -22,40 +22,10 @@ jobs:
       - name: Run update script
         run: python update.py
 
-      - name: Precision Rescue for Premium Channels
-        # 针对你列出的频道进行精准救援，防止误判为购物频道
-        run: |
-          # 定义需要修正的目标文件
-          FILES="no-shopping.m3u all.m3u"
-
-          for file in $FILES; do
-            if [ -f "$file" ]; then
-              # 1. 救援 Astro 系列
-              sed -i '/Astro/s/group-title="购物"/group-title="Astro"/g' "$file"
-              
-              # 2. 救援 电影类 (CHC, Catchplay, 美亚, POPC, Disney+, Netflix)
-              sed -i '/CHC/s/group-title="购物"/group-title="电影频道"/g' "$file"
-              sed -i '/CATCHPLAY/s/group-title="购物"/group-title="电影频道"/g' "$file"
-              sed -i '/美亚/s/group-title="购物"/group-title="电影频道"/g' "$file"
-              sed -i '/POPC/s/group-title="购物"/group-title="电影频道"/g' "$file"
-              sed -i '/Disney/s/group-title="购物"/group-title="电影频道"/g' "$file"
-              sed -i '/Netflix/s/group-title="购物"/group-title="电影频道"/g' "$file"
-              
-              # 3. 救援 综合台与港台台 (myTV SUPER, TVB, GTV)
-              sed -i '/myTV/s/group-title="购物"/group-title="港台频道"/g' "$file"
-              sed -i '/TVB/s/group-title="购物"/group-title="港台频道"/g' "$file"
-              sed -i '/GTV/s/group-title="购物"/group-title="港台频道"/g' "$file"
-              
-              # 4. 通用关键词加固 (防止漏网之鱼)
-              sed -i '/电影/s/group-title="购物"/group-title="电影频道"/g' "$file"
-              sed -i '/Movie/s/group-title="购物"/group-title="电影频道"/g' "$file"
-            fi
-          done
-
       - name: Commit and push
         run: |
           git config --local user.name "github-actions"
           git config --local user.email "github-actions@github.com"
           git add .
-          git commit -m "Rescue premium channels from shopping category" || echo "No changes to commit"
+          git commit -m "Zero-Error Update: Global Shopping Filtered" || echo "No changes to commit"
           git push
