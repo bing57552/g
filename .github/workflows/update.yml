@@ -15,14 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # 修正了插件名的大小写：mattraer (全小写)
+      # 👇 看这里：我已经把 m 改成了大写的 M
       - name: Delete old workflow runs
-        uses: mattraer/delete-workflow-runs-action@v2
+        uses: Mattraer/delete-workflow-runs-action@v2
         with:
           token: ${{ github.token }}
           repository: ${{ github.repository }}
           retain_days: 0
-          keep_minimum_runs: 6
+          keep_minimum_runs: 5
 
       - uses: actions/setup-python@v4
         with:
@@ -36,6 +36,5 @@ jobs:
           git config --local user.name "github-actions"
           git config --local user.email "github-actions@github.com"
           git add .
-          git commit -m "Fixed plugin name & Update IPTV" || echo "No changes"
+          git commit -m "Auto Update & Clean Logs" || echo "No changes"
           git push
-
