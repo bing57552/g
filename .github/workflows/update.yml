@@ -15,15 +15,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # 👇 看这里：我已经把 m 改成了大写的 M
       - name: Delete old workflow runs
         uses: Mattraks/delete-workflow-runs@v2
-with:
-  token: ${{ github.token }}
-  repository: ${{ github.repository }}
-  retain_days: 1
-  keep_minimum_runs: 3
-
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 1
+          keep_minimum_runs: 3
 
       - uses: actions/setup-python@v4
         with:
@@ -39,3 +37,4 @@ with:
           git add .
           git commit -m "Auto Update & Clean Logs" || echo "No changes"
           git push
+
