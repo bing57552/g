@@ -15,9 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # 自动清理：保留最近 5 条运行记录
+      # 修正了插件名的大小写：mattraer (全小写)
       - name: Delete old workflow runs
-        uses: Mattraer/delete-workflow-runs-action@v2
+        uses: mattraer/delete-workflow-runs-action@v2
         with:
           token: ${{ github.token }}
           repository: ${{ github.repository }}
@@ -36,5 +36,6 @@ jobs:
           git config --local user.name "github-actions"
           git config --local user.email "github-actions@github.com"
           git add .
-          git commit -m "Auto Filter & Clean" || echo "No changes"
+          git commit -m "Fixed plugin name & Update IPTV" || echo "No changes"
           git push
+
