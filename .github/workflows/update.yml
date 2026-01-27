@@ -25,7 +25,8 @@ jobs:
       - name: 运行IPTV更新脚本
         run: python update.py
         env:
-          M3U_SOURCE_URL: "https://iptv-org.github.io/iptv/countries/cn.m3u"
+          M3U_SOURCE_URL: "https://raw.githubusercontent.com/bing57552/g/main/global_cn_4k1080p_multi.m3u"
+
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 提交并推送更新
