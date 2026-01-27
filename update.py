@@ -29,7 +29,7 @@ class IPTVProcessor:
                 break
         return {
             'raw_name': name_match.group(1).strip() if name_match else None,
-            'group': group_match.group(1).strip() if group_match else '1080P影视核心频道',
+            'group': group_match.group(1).strip() if group_match else '综合频道',
             'quality': quality,
             'priority': self.quality_priority.get(quality.lower(), 0)
         } if name_match else None
@@ -60,7 +60,8 @@ class IPTVProcessor:
     def normalize_channel_name(self, name: str) -> str:
         if not name:
             return ''
-        name = re.sub(r'_主源\d+|_备用源\d+|\(.*?\)', '', name, flags=re.IGNORECASE)
+        # 彻底清除所有源标识和冗余信息
+        name = re.sub(r'_主源\d+|_备用源\d+|\(.*?\)|【.*?】', '', name, flags=re.IGNORECASE)
         name = re.sub(r'[^0-9A-Za-z一-鿿\s-]', '', name)
         return re.sub(r'\s+', ' ', name.strip()).strip()
 
@@ -77,13 +78,14 @@ class IPTVProcessor:
                     if i < len(lines):
                         url = lines[i].strip()
                         if url and 'http' in url:
+                            norm_name = self.normalize_channel_name(info['raw_name'])
                             streams.append({
-                                'raw_name': info['raw_name'],
+                                'norm_name': norm_name,
+                                'tvg_id': f"tvg_{norm_name.replace(' ', '_')}",  # 生成唯一tvg-id
                                 'group': info['group'],
                                 'url': url,
                                 'quality': info['quality'],
-                                'priority': info['priority'],
-                                'normalized_name': self.normalize_channel_name(info['raw_name'])
+                                'priority': info['priority']
                             })
             i += 1
 
@@ -91,16 +93,16 @@ class IPTVProcessor:
             logger.error("未解析到有效直播源！")
             return '#EXTM3U\n# 无有效直播源'
 
-        # 按标准化频道名分组
+        # 按标准化频道名和tvg-id分组
         channel_groups = {}
         for stream in streams:
-            norm_name = stream['normalized_name']
-            if norm_name not in channel_groups:
-                channel_groups[norm_name] = []
-            channel_groups[norm_name].append(stream)
+            key = (stream['tvg_id'], stream['norm_name'])
+            if key not in channel_groups:
+                channel_groups[key] = []
+            channel_groups[key].append(stream)
 
-        result_lines = ['#EXTM3U x-tvg-url=""', '#EXT-X-VERSION:3']
-        for norm_name, sources in channel_groups.items():
+        result_lines = ['#EXTM3U x-tvg-url=""']
+        for (tvg_id, norm_name), sources in channel_groups.items():
             # 测速并排序
             for source in sources:
                 speed_score, available = self.test_stream_quality(source['url'])
@@ -109,9 +111,9 @@ class IPTVProcessor:
                 source['total_score'] = source['priority'] * 10 + source['speed_score'] * 2 + (10 if available else 0)
             available_sources = sorted([s for s in sources if s['available']], key=lambda x: x['total_score'], reverse=True)
             if available_sources:
-                # 关键：所有源都使用统一的频道名，不带主源/备用源后缀
+                # 核心：所有源使用相同tvg-id和频道名
                 for source in available_sources:
-                    extinf = f'#EXTINF:-1 tvg-name="{norm_name}" group-title="{source["group"]}" quality="{source["quality"]}",{norm_name}'
+                    extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-name="{norm_name}" group-title="{source["group"]}" quality="{source["quality"]}",{norm_name}'
                     result_lines.extend([extinf, source['url']])
                 logger.info(f"✅ 频道 {norm_name} 已添加 {len(available_sources)} 个可用源")
 
@@ -136,9 +138,9 @@ def main():
         logger.error(f"❌ 处理M3U源失败：{str(e)}", exc_info=True)
         return
     try:
-        with open('output_single_channel.m3u', 'w', encoding='utf-8') as f:
+        with open('output_multi_source_merged.m3u', 'w', encoding='utf-8') as f:
             f.write(result_m3u)
-        logger.info("✅ 单频道多源列表已保存到 output_single_channel.m3u")
+        logger.info("✅ 合并多源频道列表已保存到 output_multi_source_merged.m3u")
     except Exception as e:
         logger.error(f"❌ 保存文件失败：{str(e)}")
 
