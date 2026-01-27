@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: 拉取仓库代码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 确保能获取完整提交历史
 
       - name: 配置Python环境
         uses: actions/setup-python@v5
@@ -24,6 +26,7 @@ jobs:
         run: python update.py
         env:
           M3U_SOURCE_URL: "https://iptv-org.github.io/iptv/countries/cn.m3u"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 提交并推送更新
         run: |
@@ -34,5 +37,5 @@ jobs:
             echo "无IPTV源更新，跳过提交"
           else
             git commit -m "Auto update IPTV $(date +'%Y-%m-%d %H:%M:%S')"
-            git push
+            git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:${{ github.ref }}
           fi
