@@ -192,7 +192,11 @@ def main():
 
     # 5. 输出 M3U（自动 EPG）
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        f.write(f'#EXTM3U x-tvg-url="{EPG_URL}"\n')
+        f.write(
+    '#EXTM3U ' +
+    ' '.join([f'x-tvg-url="{u}"' for u in EPG_URLS]) +
+    f' tvg-logo="{LOGO_URL}"\n'
+)
         for extinf, url in final:
             f.write(extinf + "\n")
             f.write(url + "\n")
