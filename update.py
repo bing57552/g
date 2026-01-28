@@ -11,7 +11,28 @@ from collections import defaultdict
 TIMEOUT = 8
 CHECK_BYTES = 1024 * 256
 MAX_SOURCES_PER_CHANNEL = 5
+# =====================
+# 精准过滤：购物 / 广告台
+# =====================
+SHOPPING_CHANNELS = {
+    "hsn", "home shopping network", "qvc us", "shophq",
+    "jewelry television", "jtv", "the shopping channel", "tsc",
+    "qvc uk", "qvc germany", "qvc italy", "qvc france",
+    "hse24", "hse extra", "ideal world", "jml direct",
+    "央广购物", "家有购物", "好易购", "优购物", "快乐购",
+    "东森购物", "momo购物", "momo 购物台", "viva购物", "森森购物",
+    "shop channel japan", "qvc japan",
+    "gs shop", "cj o shopping", "lotte homeshopping",
+    "ns home shopping", "hyundai home shopping",
+    "star cj alive", "homeshop18", "naaptol",
+    "dubai shopping", "gulf shopping",
+    "tvsn", "openshop"
+}
 
+AD_CHANNEL_KEYWORDS = {
+    "advertising", "ad channel", "promo", "promotion",
+    "campaign", "marketing", "classifieds"
+}
 SOURCE_POOL = "source_pool.txt"
 OUTPUT_FILE = "output_best.m3u"
 HEALTH_FILE = "stream_health.json"
