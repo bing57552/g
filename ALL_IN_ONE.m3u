@@ -1,0 +1,19 @@
+#EXTM3U
+#EXTINF:-1 tvg-id="tvg_TVBS_Asia" tvg-name="TVBS Asia" group-title="其他",TVBS Asia
+http://38.64.72.148/hls/modn/list/4005/playlist.m3u8
+#EXTINF:-1 tvg-id="tvg_TVBS_Asia" tvg-name="TVBS Asia" group-title="其他",TVBS Asia
+http://38.64.72.148/hls/modn/list/4005/playlist.m3u8
+#EXTINF:-1 tvg-id="tvg_Channel_8" tvg-name="Channel 8" group-title="其他",Channel 8
+https://app.viloud.tv/hls/channel/57148804a268f59e0c1af0c1b67a2f7e.m3u8
+#EXTINF:-1 tvg-id="tvg_Channel_8" tvg-name="Channel 8" group-title="其他",Channel 8
+https://app.viloud.tv/hls/channel/57148804a268f59e0c1af0c1b67a2f7e.m3u8
+#EXTINF:-1 tvg-id="tvg_Harbin_Movie_Channel" tvg-name="Harbin Movie Channel" group-title="其他",Harbin Movie Channel
+https://stream.hrbtv.net/yspd/playlist.m3u8
+#EXTINF:-1 tvg-id="tvg_Harbin_Movie_Channel" tvg-name="Harbin Movie Channel" group-title="其他",Harbin Movie Channel
+https://stream.hrbtv.net/yspd/playlist.m3u8
+#EXTINF:-1 tvg-id="tvg_Bread_TV" tvg-name="Bread TV" group-title="其他",Bread TV
+https://video.bread-tv.com:8091/hls-live24/online/index.m3u8
+#EXTINF:-1 tvg-id="tvg_Bread_TV" tvg-name="Bread TV" group-title="其他",Bread TV
+https://video.bread-tv.com:8091/hls-live24/online/index.m3u8
+#EXTINF:-1 tvg-id="tvg_Bread_TV" tvg-name="Bread TV" group-title="香港",Bread TV
+https://video.bread-tv.com:8091/hls-live24/online/index.m3u8
