@@ -1,6 +1,6 @@
 https://raw.githubusercontent.com/bing57552/g/main/global_cn_4k1080p_multi.m3u
 https://raw.githubusercontent.com/bing57552/g/main/hk.m3u
 https://raw.githubusercontent.com/bing57552/g/main/tw.m3u
-https://raw.githubusercontent.com/bing57552/g/main/oversea.m3u
 https://raw.githubusercontent.com/bing57552/g/main/movie.m3u
+https://raw.githubusercontent.com/bing57552/g/main/oversea.m3u
 https://raw.githubusercontent.com/bing57552/g/main/no-shopping.m3u
