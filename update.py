@@ -9,17 +9,31 @@ SOURCE_FILES = [
     "all.m3u",
 ]
 
-TIMEOUT = 5  # 秒，够稳了
+TIMEOUT = 5
+RETRY = 3
 
-def speed_test(url):
+def test_stream(url):
+    score = 0
     try:
-        start = time.time()
-        r = requests.head(url, timeout=TIMEOUT, allow_redirects=True)
-        if r.status_code == 200:
-            return round(time.time() - start, 2)
+        for _ in range(RETRY):
+            start = time.time()
+            r = requests.get(
+                url,
+                timeout=TIMEOUT,
+                stream=True,
+                headers={"User-Agent": "Mozilla/5.0"}
+            )
+            if r.status_code != 200:
+                return None
+            ctype = r.headers.get("Content-Type", "").lower()
+            if "video" in ctype or "mpegurl" in ctype or url.endswith(".m3u8"):
+                delay = time.time() - start
+                score += max(0, 5 - delay)
+            else:
+                return None
+        return round(score, 2)
     except:
-        pass
-    return None  # 不可用
+        return None
 
 def parse_m3u(text):
     channels = defaultdict(list)
@@ -38,34 +52,32 @@ def parse_m3u(text):
 
 all_channels = defaultdict(list)
 
-# 1️⃣ 读取并聚合
+# 聚合
 for file in SOURCE_FILES:
     try:
         with open(file, "r", encoding="utf-8") as f:
-            data = f.read()
-        parsed = parse_m3u(data)
+            parsed = parse_m3u(f.read())
         for name, items in parsed.items():
             all_channels[name].extend(items)
     except:
         pass
 
-# 2️⃣ 测速 + 排序
 final_channels = {}
 
+# 检测 + 排序 + 替换
 for name, items in all_channels.items():
-    tested = []
+    valid = []
     for info, url in items:
-        t = speed_test(url)
-        if t is not None:
-            tested.append((t, info, url))
+        score = test_stream(url)
+        if score:
+            valid.append((score, info, url))
 
-    # 按速度排序（越快越前）
-    tested.sort(key=lambda x: x[0])
+    valid.sort(key=lambda x: x[0], reverse=True)
 
-    if tested:
-        final_channels[name] = tested
+    if valid:
+        final_channels[name] = valid
 
-# 3️⃣ 输出最终 ALL_IN_ONE.m3u
+# 输出
 with open("ALL_IN_ONE.m3u", "w", encoding="utf-8") as f:
     f.write("#EXTM3U\n")
     for name, sources in final_channels.items():
