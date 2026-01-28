@@ -1,198 +1,182 @@
-import os
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import re
-import json
+import sys
 import time
+import socket
 import requests
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
+from urllib.parse import urlparse
 
 # =========================
-# 基础参数（稳定优先）
+# 基础配置
 # =========================
-TIMEOUT = 8
-CHECK_BYTES = 256 * 1024
-MAX_SOURCES_PER_CHANNEL = 5
-FAIL_LIMIT = 3
-COOLDOWN_HOURS = 24
-
-SOURCE_POOL = "source_pool.txt"
-OUTPUT_MAIN = "output_best.m3u"
-OUTPUT_BACKUP = "output_backup.m3u"
-HEALTH_FILE = "stream_health.json"
+INPUT_FILE = "input.m3u"
+OUTPUT_FILE = "output.m3u"
+TIMEOUT = 6
 
 # =========================
-# 广告 / 购物台精准过滤
+# 购物 / 广告台 精准过滤
 # =========================
 SHOPPING_CHANNELS = {
-    "qvc", "hsn", "shop", "购物", "home shopping", "tv shopping",
-    "momo", "东森购物", "viva购物", "森森购物", "家有购物",
-    "优购物", "快乐购", "央广购物", "jtv", "shop channel"
+    "hsn", "qvc", "shophq", "jewelry",
+    "购物", "家有购物", "优购物", "快乐购",
+    "东森购物", "momo", "viva", "森森",
+    "shop channel", "homeshopping",
 }
 
-AD_KEYWORDS = {
-    "advert", "promo", "ad ", "广告", "推广", "促销", "classified"
+AD_CHANNEL_KEYWORDS = {
+    "广告", "ad ", "promo", "shopping",
+    "brand", "marketing", "campaign",
+}
+
+# =========================
+# 影视 / 剧集 白名单（防误杀）
+# =========================
+DRAMA_MOVIE_WHITELIST = {
+    "cctv-6", "cctv-8", "电影", "影院", "影视",
+    "凤凰中文", "凤凰资讯", "凤凰香港",
+    "now", "tvb", "翡翠", "明珠",
+}
+
+# =========================
+# EPG 精准映射
+# =========================
+EPG_ID_MAP = {
+    "凤凰中文": "PhoenixChinese",
+    "凤凰资讯": "PhoenixInfo",
+    "凤凰香港": "PhoenixHK",
+    "NOW星影": "NowBaoguMovies",
+    "Now爆谷": "NowBaoguMovies",
+    "中天新闻": "CTiNews",
+    "亚洲卫视": "AsiaTV",
 }
 
 # =========================
 # 工具函数
 # =========================
-def fetch_text(url):
-    try:
-        r = requests.get(url, timeout=TIMEOUT)
-        if r.status_code == 200 and "#EXTM3U" in r.text:
-            return r.text
-    except:
-        pass
-    return ""
-
-def is_stream_alive(url):
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, stream=True, timeout=TIMEOUT, headers=headers)
-        ct = r.headers.get("Content-Type", "").lower()
-        if "text/html" in ct:
+def is_ad_or_shop(name: str) -> bool:
+    n = name.lower()
+    for w in DRAMA_MOVIE_WHITELIST:
+        if w.lower() in n:
             return False
-
-        size = 0
-        start = time.time()
-        for chunk in r.iter_content(8192):
-            if not chunk:
-                continue
-            size += len(chunk)
-            if size >= CHECK_BYTES:
-                return True
-            if time.time() - start > 3:
-                return False
-    except:
-        return False
+    for k in SHOPPING_CHANNELS | AD_CHANNEL_KEYWORDS:
+        if k in n:
+            return True
     return False
 
-def score_url(url):
+
+def is_stream_alive(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname
+        if not host:
+            return False
+        socket.setdefaulttimeout(TIMEOUT)
+        socket.gethostbyname(host)
+        return True
+    except Exception:
+        return False
+
+
+def detect_quality(url: str) -> str:
     u = url.lower()
-    score = 0
-    if "4k" in u: score += 40
-    if "2160" in u: score += 35
-    if "1080" in u: score += 25
-    if u.startswith("https"): score += 10
-    if ".m3u8" in u: score += 10
-    return score
+    if "2160" in u or "4k" in u:
+        return "4K"
+    if "1080" in u:
+        return "1080P"
+    if "720" in u:
+        return "720P"
+    return "HD"
 
-def parse_m3u(text):
-    lines = text.splitlines()
-    res, cur = [], None
-    for l in lines:
-        if l.startswith("#EXTINF"):
-            cur = l
-        elif l and not l.startswith("#") and cur:
-            res.append((cur, l.strip()))
-            cur = None
-    return res
-
-def extract_meta(extinf):
-    name = re.search(r",(.+)", extinf)
-    tvg = re.search(r'tvg-id="([^"]*)"', extinf)
-    return name.group(1).strip(), tvg.group(1).strip() if tvg else ""
-
-def is_ad_channel(name):
-    n = name.lower()
-    return any(k in n for k in SHOPPING_CHANNELS | AD_KEYWORDS)
 
 # =========================
-# 加载源池
+# 读取 M3U
 # =========================
-def load_sources():
-    urls = []
-    with open(SOURCE_POOL, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            urls.append(line)
-    return list(set(urls))
+with open(INPUT_FILE, "r", encoding="utf-8", errors="ignore") as f:
+    lines = [l.strip() for l in f if l.strip()]
+
+channels = []
+i = 0
+while i < len(lines):
+    if lines[i].startswith("#EXTINF"):
+        extinf = lines[i]
+        url = lines[i + 1] if i + 1 < len(lines) else ""
+        channels.append((extinf, url))
+        i += 2
+    else:
+        i += 1
 
 # =========================
-# 主逻辑
+# 聚合频道
 # =========================
-def main():
-    now = int(time.time())
-    health = {}
-    if os.path.exists(HEALTH_FILE):
-        with open(HEALTH_FILE, "r", encoding="utf-8") as f:
-            health = json.load(f)
+all_channels = defaultdict(list)
 
-    channels = OrderedDict()
-    for src in load_sources():
-        text = fetch_text(src)
-        if not text:
-            continue
-        for extinf, url in parse_m3u(text):
-            name, tvg = extract_meta(extinf)
-            if not name or is_ad_channel(name):
-                continue
-            key = (name, tvg)
-            channels.setdefault(key, []).append((extinf, url))
+for extinf, url in channels:
+    name_match = re.search(r",(.+)$", extinf)
+    if not name_match:
+        continue
 
-    final_main = []
-    final_backup = []
+    name = name_match.group(1).strip()
 
-    ch_no = 1
-    for (name, tvg), items in channels.items():
-        scored = []
-        for extinf, url in items:
-            h = health.get(url, {})
-            fails = h.get("fails", 0)
-            last = h.get("last", 0)
+    if is_ad_or_shop(name):
+        continue
 
-            if fails >= FAIL_LIMIT and now - last < COOLDOWN_HOURS * 3600:
-                continue
+    if not is_stream_alive(url):
+        continue
 
-            alive = is_stream_alive(url)
-            health[url] = {
-                "alive": alive,
-                "last": now,
-                "fails": 0 if alive else fails + 1
-            }
+    all_channels[name].append((extinf, url))
 
-            if alive:
-                score = score_url(url)
-                extinf_fix = extinf
-                if 'tvg-logo' not in extinf_fix:
-                    extinf_fix = extinf_fix.replace(
-                        "#EXTINF:",
-                        f'#EXTINF:tvg-chno="{ch_no}" tvg-id="{tvg}" tvg-name="{name}" tvg-logo="",'
-                    )
-                scored.append((score, extinf_fix, url))
+# =========================
+# 生成 final
+# =========================
+final = []
 
-        scored.sort(reverse=True)
+for name, items in all_channels.items():
+    tvg_id = EPG_ID_MAP.get(name, "")
+    logo = ""
+    if tvg_id:
+        logo = f'https://raw.githubusercontent.com/fanmingming/live/main/tv/{tvg_id}.png'
 
-        if not scored:
-            continue
+    for _, url in items:
+        quality = detect_quality(url)
 
-        for s in scored[:MAX_SOURCES_PER_CHANNEL]:
-            final_main.append((s[1], s[2]))
+        extinf = f'#EXTINF:-1 tvg-name="{name}"'
+        if tvg_id:
+            extinf += f' tvg-id="{tvg_id}"'
+        if logo:
+            extinf += f' tvg-logo="{logo}"'
+        extinf += f',{name} | {quality}'
 
-        for s in scored[MAX_SOURCES_PER_CHANNEL:MAX_SOURCES_PER_CHANNEL*2]:
-            final_backup.append((s[1], s[2]))
+        final.append((extinf, url))
 
-        ch_no += 1
+# =========================
+# 排序 + 编号（稳定）
+# =========================
+final.sort(key=lambda x: x[0])
 
-    if not final_main:
-        print("❌ 没有生成任何频道，已中止写文件")
-        return
+sorted_final = []
+channel_index = 1
 
-    with open(OUTPUT_MAIN, "w", encoding="utf-8") as f:
-        f.write("#EXTM3U\n")
-        for e, u in final_main:
-            f.write(e + "\n" + u + "\n")
+for extinf, url in final:
+    if 'tvg-chno' not in extinf:
+        extinf = extinf.replace(
+            '#EXTINF:-1 ',
+            f'#EXTINF:-1 tvg-chno="{channel_index}" '
+        )
+    sorted_final.append((extinf, url))
+    channel_index += 1
 
-    with open(OUTPUT_BACKUP, "w", encoding="utf-8") as f:
-        f.write("#EXTM3U\n")
-        for e, u in final_backup:
-            f.write(e + "\n" + u + "\n")
+final = sorted_final
 
-    with open(HEALTH_FILE, "w", encoding="utf-8") as f:
-        json.dump(health, f, indent=2, ensure_ascii=False)
+# =========================
+# 写出文件
+# =========================
+with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+    f.write("#EXTM3U\n")
+    for extinf, url in final:
+        f.write(extinf + "\n")
+        f.write(url + "\n")
 
-    print("✅ 终极 IPTV 全自动运维完成")
-
-if __name__ == "__main__":
-    main()
+print(f"✅ 完成：{len(final)} 条频道输出 → {OUTPUT_FILE}")
