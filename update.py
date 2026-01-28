@@ -181,18 +181,16 @@ def main():
 
         scored.sort(reverse=True)
 
-        # ===== 你要的核心逻辑（已正确处理）=====
-        if not scored:
-            # 保底：使用上一次成功的源，避免频道消失
-            for extinf, url in items:
-                if health.get(url, {}).get("alive"):
-                    final.append((extinf, url))
-                    break
-            continue
+if not scored:
+    for extinf, url in items:
+        if health.get(url, {}).get("alive"):
+            final.append((extinf, url))
+            break
+    continue
 
-        limit = MAX_SOURCES_PER_CHANNEL
-        for s in scored[:limit]:
-            final.append((s[1], s[2]))
+limit = MAX_SOURCES_PER_CHANNEL
+for s in scored[:limit]:
+    final.append((s[1], s[2]))
 
     # =====================
     # 输出
