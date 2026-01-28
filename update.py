@@ -126,6 +126,15 @@ def main():
                 scored.append((score_url(url), extinf, url))
 
         scored.sort(reverse=True)
+
+        if not scored:
+            # 保底：使用上一次成功的源，避免频道消失
+            for extinf, url in items:
+                if health.get(url, {}).get("alive"):
+                    final.append((extinf, url))
+                    break
+            continue
+
         for s in scored[:MAX_SOURCES_PER_CHANNEL]:
             final.append((s[1], s[2]))
 
