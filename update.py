@@ -1,91 +1,74 @@
-import os
 import requests
+import time
 from collections import defaultdict
 
-SOURCE_URL = os.environ.get(
-    "M3U_SOURCE_URL",
-    "https://raw.githubusercontent.com/bing57552/g/main/global_cn_4k1080p_multi.m3u"
-)
+SOURCE_FILES = [
+    "global_cn_4k1080p_multi.m3u",
+    "hk.m3u",
+    "movie.m3u",
+    "all.m3u",
+]
 
-OUTPUT_FILE = "ALL_IN_ONE.m3u"
+TIMEOUT = 5  # 秒，够稳了
 
+def speed_test(url):
+    try:
+        start = time.time()
+        r = requests.head(url, timeout=TIMEOUT, allow_redirects=True)
+        if r.status_code == 200:
+            return round(time.time() - start, 2)
+    except:
+        pass
+    return None  # 不可用
 
-def fetch_m3u(url: str) -> str:
-    r = requests.get(url, timeout=30)
-    r.raise_for_status()
-    return r.text
-
-
-def parse_m3u(content: str):
-    """
-    返回结构:
-    {
-      (name, tvg_id, group): [url1, url2, ...]
-    }
-    """
+def parse_m3u(text):
     channels = defaultdict(list)
-
-    lines = [l.strip() for l in content.splitlines() if l.strip()]
-    current_info = None
-
-    for line in lines:
-        if line.startswith("#EXTINF"):
-            # 解析 EXTINF
-            name = line.split(",")[-1].strip()
-
-            def pick(key):
-                if f'{key}="' in line:
-                    return line.split(f'{key}="')[1].split('"')[0]
-                return ""
-
-            tvg_id = pick("tvg-id")
-            group = pick("group-title") or "其他"
-
-            current_info = (name, tvg_id, group)
-
-        elif line.startswith("#"):
-            continue
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        if lines[i].startswith("#EXTINF"):
+            info = lines[i]
+            name = info.split(",")[-1].strip()
+            url = lines[i + 1].strip()
+            channels[name].append((info, url))
+            i += 2
         else:
-            # URL 行
-            if current_info:
-                channels[current_info].append(line)
-
+            i += 1
     return channels
 
+all_channels = defaultdict(list)
 
-def write_all_in_one(channels: dict):
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        f.write("#EXTM3U\n\n")
+# 1️⃣ 读取并聚合
+for file in SOURCE_FILES:
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            data = f.read()
+        parsed = parse_m3u(data)
+        for name, items in parsed.items():
+            all_channels[name].extend(items)
+    except:
+        pass
 
-        for (name, tvg_id, group), urls in sorted(channels.items()):
-            f.write(
-                f'#EXTINF:-1 tvg-id="{tvg_id}" group-title="{group}",{name}\n'
-            )
+# 2️⃣ 测速 + 排序
+final_channels = {}
 
-            # URL 去重但保持顺序
-            seen = set()
-            for u in urls:
-                if u not in seen:
-                    seen.add(u)
-                    f.write(u + "\n")
+for name, items in all_channels.items():
+    tested = []
+    for info, url in items:
+        t = speed_test(url)
+        if t is not None:
+            tested.append((t, info, url))
 
-            f.write("\n")
+    # 按速度排序（越快越前）
+    tested.sort(key=lambda x: x[0])
 
+    if tested:
+        final_channels[name] = tested
 
-def main():
-    print("📥 下载源:", SOURCE_URL)
-    content = fetch_m3u(SOURCE_URL)
-
-    print("🔍 解析并聚合频道…")
-    channels = parse_m3u(content)
-
-    print(f"📺 聚合完成：{len(channels)} 个频道")
-
-    print("✍️ 写入 ALL_IN_ONE.m3u")
-    write_all_in_one(channels)
-
-    print("✅ 完成")
-
-
-if __name__ == "__main__":
-    main()
+# 3️⃣ 输出最终 ALL_IN_ONE.m3u
+with open("ALL_IN_ONE.m3u", "w", encoding="utf-8") as f:
+    f.write("#EXTM3U\n")
+    for name, sources in final_channels.items():
+        for _, info, url in sources:
+            f.write(info + "\n")
+            f.write(url + "\n")
