@@ -25,11 +25,33 @@ def fetch_text(url):
 
 def is_stream_alive(url):
     try:
-        r = requests.get(url, stream=True, timeout=TIMEOUT)
-        for _ in r.iter_content(chunk_size=CHECK_BYTES):
-            return True
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Icy-MetaData": "1"
+        }
+        r = requests.get(url, stream=True, timeout=TIMEOUT, headers=headers)
+        start = time.time()
+        size = 0
+
+        ct = r.headers.get("Content-Type", "").lower()
+        if "text/html" in ct:
+            return False
+
+        for chunk in r.iter_content(chunk_size=8192):
+            if not chunk:
+                continue
+            size += len(chunk)
+
+            # 真正拉到 TS 数据
+            if size >= CHECK_BYTES:
+                return True
+
+            # 超时直接判失败
+            if time.time() - start > 3:
+                return False
     except:
-        pass
+        return False
+
     return False
 
 def score_url(url):
