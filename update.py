@@ -201,6 +201,32 @@ def main():
 
     final = []
 
+for name, urls in grouped.items():
+    for u in urls:
+        extinf = ...
+        final.append((extinf, u))
+
+# ✅ 就在这里：排序 / 编号 / LOGO
+sorted_final = []
+channel_index = 1
+
+for extinf, u in final:
+    if 'tvg-chno' not in extinf:
+        extinf = extinf.replace(
+            '#EXTINF:',
+            f'#EXTINF:-1 tvg-chno="{channel_index}" '
+        )
+    sorted_final.append((extinf, u))
+    channel_index += 1
+
+final = sorted_final
+
+# ✅ 然后才写文件
+with open(output_file, "w", encoding="utf-8") as f:
+    for extinf, u in final:
+        f.write(extinf + "\n")
+        f.write(u + "\n")
+
     # 3. 探测 + 评分
     for (name, tvg), items in all_channels.items():
         scored = []
