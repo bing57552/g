@@ -1,155 +1,140 @@
-import requests
-import time
 import os
-import logging
+import re
+import json
+import time
+import requests
 from collections import defaultdict
+from urllib.parse import urlparse
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# =====================
+# 基础配置
+# =====================
+TIMEOUT = 8
+CHECK_BYTES = 1024 * 256
+MAX_SOURCES_PER_CHANNEL = 5
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (IPTV-Checker)"
-}
+SOURCE_POOL = "source_pool.txt"
+OUTPUT_FILE = "output_best.m3u"
+HEALTH_FILE = "stream_health.json"
 
-TIMEOUT = 6
-
-
-# =========================
-# 基础检测：是否可播
-# =========================
-def check_stream(url: str):
+# =====================
+# 工具函数
+# =====================
+def fetch_text(url):
     try:
-        start = time.time()
-        r = requests.head(
-            url,
-            headers=HEADERS,
-            timeout=TIMEOUT,
-            allow_redirects=True,
-            verify=False
-        )
-        delay = time.time() - start
+        r = requests.get(url, timeout=TIMEOUT)
+        if r.status_code == 200 and "#EXTM3U" in r.text:
+            return r.text
+    except:
+        pass
+    return ""
 
-        if r.status_code != 200:
-            return False, 0
+def is_stream_alive(url):
+    try:
+        r = requests.get(url, stream=True, timeout=TIMEOUT)
+        for _ in r.iter_content(chunk_size=CHECK_BYTES):
+            return True
+    except:
+        pass
+    return False
 
-        score = 0
+def score_url(url):
+    score = 0
+    if "4k" in url.lower():
+        score += 30
+    if "1080" in url.lower():
+        score += 20
+    if url.startswith("https"):
+        score += 10
+    if ".m3u8" in url:
+        score += 10
+    return score
 
-        # 响应时间评分
-        if delay < 0.8:
-            score += 100
-        elif delay < 1.5:
-            score += 70
-        elif delay < 3:
-            score += 40
-        else:
-            score += 10
+# =====================
+# 解析 m3u
+# =====================
+def parse_m3u(content):
+    lines = content.splitlines()
+    channels = []
+    current = None
 
-        # 内容类型加权
-        ctype = r.headers.get("Content-Type", "").lower()
-        if "mpegurl" in ctype or "m3u8" in url:
-            score += 50
+    for line in lines:
+        if line.startswith("#EXTINF"):
+            current = line
+        elif line and not line.startswith("#") and current:
+            channels.append((current, line))
+            current = None
+    return channels
 
-        # 清晰度关键词加权（仅排序用）
-        u = url.lower()
-        if "2160" in u or "4k" in u or "uhd" in u:
-            score += 300
-        elif "1080" in u or "fhd" in u:
-            score += 200
-        elif "720" in u:
-            score += 100
-        else:
-            score += 30
+def extract_meta(extinf):
+    name = re.search(r",(.+)", extinf)
+    tvg = re.search(r'tvg-id="([^"]*)"', extinf)
+    return (
+        name.group(1).strip() if name else "",
+        tvg.group(1).strip() if tvg else ""
+    )
 
-        return True, score
+# =====================
+# 主逻辑
+# =====================
+def main():
+    # 1. 读取健康记录
+    health = {}
+    if os.path.exists(HEALTH_FILE):
+        with open(HEALTH_FILE, "r", encoding="utf-8") as f:
+            health = json.load(f)
 
-    except Exception:
-        return False, 0
+    # 2. 拉取所有源
+    pool_urls = []
+    if os.path.exists(SOURCE_POOL):
+        with open(SOURCE_POOL, "r", encoding="utf-8") as f:
+            pool_urls = [l.strip() for l in f if l.strip()]
 
+    all_channels = defaultdict(list)
 
-# =========================
-# 主处理逻辑
-# =========================
-def process_m3u(m3u_text: str) -> str:
-    lines = [l.strip() for l in m3u_text.splitlines() if l.strip()]
-    result = ["#EXTM3U"]
+    for src in pool_urls:
+        text = fetch_text(src)
+        if not text:
+            continue
+        for extinf, url in parse_m3u(text):
+            name, tvg = extract_meta(extinf)
+            if not name:
+                continue
+            all_channels[(name, tvg)].append((extinf, url))
 
-    # 以「EXTINF 原文」为核心，不做任何修改
-    channel_map = defaultdict(list)
+    # 3. 探测 & 评分
+    final_channels = []
 
-    i = 0
-    while i < len(lines) - 1:
-        if lines[i].startswith("#EXTINF"):
-            extinf = lines[i]
-            url = lines[i + 1]
+    for (name, tvg), items in all_channels.items():
+        scored = []
+        for extinf, url in items:
+            alive = is_stream_alive(url)
+            health[url] = {
+                "alive": alive,
+                "last_check": int(time.time())
+            }
+            if alive:
+                scored.append((score_url(url), extinf, url))
 
-            # 用 EXTINF 本身作为频道唯一标识
-            channel_map[extinf].append({
-                "extinf": extinf,
-                "url": url
-            })
-            i += 2
-        else:
-            i += 1
-
-    logging.info(f"解析频道数：{len(channel_map)}")
-
-    for extinf, sources in channel_map.items():
-        checked = []
-
-        for s in sources:
-            ok, score = check_stream(s["url"])
-            if ok:
-                s["score"] = score
-                checked.append(s)
-
-        if not checked:
-            logging.warning("频道无可用源，跳过")
+        if not scored:
             continue
 
-        # 按评分排序（只影响顺序）
-        checked.sort(key=lambda x: x["score"], reverse=True)
+        scored.sort(reverse=True)
+        for s in scored[:MAX_SOURCES_PER_CHANNEL]:
+            final_channels.append((s[1], s[2]))
 
-        logging.info(f"频道保留源数量：{len(checked)}")
+    # 4. 输出 m3u
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        f.write("#EXTM3U\n")
+        for extinf, url in final_channels:
+            f.write(extinf + "\n")
+            f.write(url + "\n")
 
-        # ⚠️ EXTINF 原样写回，多次写 = 多源
-        for s in checked:
-            result.append(extinf)
-            result.append(s["url"])
+    # 5. 保存健康状态
+    with open(HEALTH_FILE, "w", encoding="utf-8") as f:
+        json.dump(health, f, indent=2, ensure_ascii=False)
 
-    return "\n".join(result)
-
-
-# =========================
-# 入口
-# =========================
-def main():
-    src_url = os.getenv("M3U_SOURCE_URL")
-    if not src_url:
-        logging.error("未配置 M3U_SOURCE_URL")
-        return
-
-    try:
-        r = requests.get(
-            src_url,
-            headers=HEADERS,
-            timeout=15,
-            allow_redirects=True,
-            verify=False
-        )
-        r.raise_for_status()
-    except Exception as e:
-        logging.error(f"拉取源失败：{e}")
-        return
-
-    output = process_m3u(r.text)
-
-    with open("output_best.m3u", "w", encoding="utf-8") as f:
-        f.write(output)
-
-    logging.info("✅ output_best.m3u 生成完成")
-
+    print("✅ IPTV 自动运维完成")
 
 if __name__ == "__main__":
     main()
