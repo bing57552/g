@@ -1,4 +1,39 @@
-#EXTM3U
+#EXTINF:-1,8TV
+http://example.com/live/8tv.m3u8
+
+#EXTINF:-1,CHC 高清电影
+http://example.com/live/chc_hd.m3u8
+
+#EXTINF:-1,天映电影
+http://example.com/live/celestial_movie.m3u8
+
+#EXTINF:-1,天映经典
+http://example.com/live/celestial_classic.m3u8
+
+#EXTINF:-1,Astro Catchplay
+http://example.com/live/astro_catchplay.m3u8
+
+#EXTINF:-1,Astro AOD
+http://example.com/live/astro_aod.m3u8
+
+#EXTINF:-1,Astro 华丽台
+http://example.com/live/astro_glamour.m3u8
+
+#EXTINF:-1,HBO Asia
+http://example.com/live/hbo_asia.m3u8
+
+#EXTINF:-1,HUB 戏剧台
+http://example.com/live/hub_drama.m3u8
+
+#EXTINF:-1,Now TV 美亚
+http://example.com/live/now_meiya.m3u8#EXTINF:-1,CHC 高清电影
+http://example.com/live/chc_hd.m3u8
+
+#EXTINF:-1,CHC 家庭影院
+http://example.com/live/chc_family.m3u8
+
+#EXTINF:-1,CHC 动作电影
+http://example.com/live/chc_action.m3u8#EXTM3U
 
 # =========================
 #      台湾电影频道
