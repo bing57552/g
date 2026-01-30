@@ -1,9 +1,9 @@
-name: Auto Update IPTV
+name: Auto Update IPTV Asia Drama
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
-  workflow_dispatch:
+    - cron: '0 0,12 * * *'   # 每天 UTC 0:00 和 12:00（美國東部時間晚上7點和早上7點）
+  workflow_dispatch:         # 允許手動觸發（點 Run workflow）
 
 jobs:
   update-iptv:
@@ -27,18 +27,21 @@ jobs:
 
       - name: Run IPTV updater
         env:
-          M3U_SOURCE_URL: "https://raw.githubusercontent.com/bing57552/g/main/global_cn_4k1080p_multi.m3u"
+          # 改用更適合華語電影/劇集的源（suxuang 更新頻繁，港澳台+馬來西亞齊全）
+          M3U_SOURCE_URL: "https://gh-proxy.com/raw.githubusercontent.com/suxuang/myIPTV/main/ipv4.m3u"
+          # 如果你有 update.py 支援其他 env，可加
+          # FORCE_CHANNELS: "Astro 华丽台,Astro AOD,Catchplay,HBO,美亞電影台"
         run: |
-          python update.py
+          python update.py || echo "腳本運行失敗，但繼續 commit 任何變化"
 
       - name: Commit and push if changed
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add output_best.m3u
+          git add output_best.m3u asia-drama.m3u || true   # 加你可能有的其他 m3u 文件
           if git diff --cached --quiet; then
             echo "No changes, skip commit"
           else
-            git commit -m "Auto update IPTV $(date +'%Y-%m-%d %H:%M:%S')"
+            git commit -m "自動更新 IPTV 亞洲華語電影劇集源 $(date -u +'%Y-%m-%d %H:%M UTC')"
             git push
           fi
